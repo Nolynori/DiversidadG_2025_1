@@ -1,6 +1,6 @@
 ---
-title: "Genome-wide analysis of genetic diversity in a germplasm collection including wild relatives and interspecific clones of garden asparagus"
-author: "Flavio Lozano"
+title: "Investigating genomic and phenotypic parallelism between piscivorous and planktivorous lake trout (Salvelinus namaycush) ecotypes by means of RADseq and morphometrics analyses"
+authors: "Fernando Chuquizuta Chavez, Maria Noelia Noriega Cortez, Jessenia Shirley Ramos Armaulia"
 format:
   html:
     toc: true
@@ -10,15 +10,27 @@ format:
     self-contained: true
     output-file: "index"
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 execute: 
   warning: false
   echo: false
 ---
 
+# Título
+
+**Investigating genomic and phenotypic parallelism between piscivorous and planktivorous lake trout (*Salvelinus namaycush*) ecotypes by means of RADseq and morphometrics analyses**
+
+# **Descripción**
+
+El archivo investiga el paralelismo genómico y fenotípico entre ecotipos de trucha de lago (*Salvelinus namaycush*) piscívoros y planctívoros utilizando análisis de RADseq y morfometría. Se examinan diferencias en morfología y estructura genética, concluyendo que existen dos ecotipos con características morfológicas adaptativas diferentes relacionadas con sus tácticas de forrajeo, además de identificar loci potencialmente bajo selección genética
+
 # Referencias
 
-- https://doi.org/10.3389/fpls.2023.1187663
+-   Bernatchez, S., Laporte, M., Perrier, C., Sirois, P., & Bernatchez, L. (2016). Investigating genomic and phenotypic parallelism between piscivorous and planktivorous lake trout (Salvelinus namaycush) ecotypes by means of RADseq and morphometrics analyses. *Molecular ecology*, *25*(19), 4773–4792. https://doi.org/10.1111/mec.13795
+
+# DOI
+
+-   https://doi.org/10.1111/mec.13795
 
 # Librerias y configuración
 
@@ -29,33 +41,45 @@ source('https://inkaverse.com/setup.r')
 
 cat("Project: ", getwd(), "\n")
 session_info()
+
+
 ```
 
 # Importación de datos
 
-> url: https://docs.google.com/spreadsheets/d/1vndj_EaHTAxHs2FQjs7PXQTNC65igP1m6thQMp11-3c/edit?gid=0#gid=0
+> url: https://docs.google.com/spreadsheets/d/1DIFQg1WL8kilk5PIQ19nELga6gK1beRI5AcEkXesfuE/edit?gid=332267912#gid=332267912
+
+*Nota*: Esta url data dirección a la base de datos del paper en una nube de drive
 
 ```{r}
-url <- "https://docs.google.com/spreadsheets/d/1vndj_EaHTAxHs2FQjs7PXQTNC65igP1m6thQMp11-3c/edit?gid=0#gid=0"
 
+#Subimos la dirección a una variable
+url <- "https://docs.google.com/spreadsheets/d/1DIFQg1WL8kilk5PIQ19nELga6gK1beRI5AcEkXesfuE/edit?gid=332267912#gid=332267912"
+
+#Convertimos las entradas en una instancia de hojas
 gs <- as_sheets_id(url)
 
-ploi <- range_read(ss = gs, sheet = "STable1")
+#Creamos nuestra tabla con variables cuanlitativas para el agrupamiento
+quanti <- range_read(ss = gs, sheet = "STable1")
 
+#Creamos nuestra tabla con variables cuantitativas con la infromacion fenotipica
 feno <- range_read(ss = gs, sheet = "STable2") %>% # ctrl + shit + m
   rename_all(~ str_replace_all(., " ", "_")) %>% 
   mutate(across(2:ncol(.), ~gsub("-", NA, .))) # 
 
+#Revisamos la estructura de las tablas
 str(feno)
-str(ploi)
+str(quanti)
 ```
 
 # Unir base de datos
 
 ```{r}
-fb <- merge(feno, ploi) %>% 
-  dplyr::select(Genotype, Type, Ploidy, Sex, Species, everything()) %>% 
-  mutate(across(Plant_number:ncol(.), ~ as.numeric(.)))
+
+#Unimos las tablas y hacemos aseguramos que las variables sean numericas
+fb <- merge(feno, quanti) %>% 
+  dplyr::select(ID, lake, sex, ecotype, everything()) %>% 
+  mutate(across(fork_length:ncol(.), ~ as.numeric(.)))
 
 str(fb)
 
@@ -65,9 +89,59 @@ fb %>% kable()
 # Análisis de componentes principales - PCA
 
 ```{r}
+#Implementamos el PCA con la función PCA del paquete FactoMineR
 mv <- PCA(X = fb, scale.unit = T, quali.sup = 1:5, graph = F)
 
+```
+
+### PCA por agrupación por lagos
+
+```{r}
+
+#Creamos la grafica de variables
 var <- plot.PCA(mv, choix = c("var"), cex=0.7)
+
+#Creamos los grafica de componetos con los individuos
+
+ind <- plot.PCA(mv, choix = c("ind"), cex=0.7
+                , label = "ind"
+                , invisible = "quali"
+                , habillage = 2
+                )
+
+#Unimos Las gráficas creados
+list(var, ind) %>% 
+  plot_grid(plotlist = ., ncol = 2, labels = "auto")
+
+
+```
+
+### PCA por agrupación por sexo
+
+```{r}
+#Creamos la grafica de variables
+var <- plot.PCA(mv, choix = c("var"), cex=0.7)
+
+#Creamos los grafica de componetos con los individuos
+
+ind <- plot.PCA(mv, choix = c("ind"), cex=0.7
+                , label = "ind"
+                , invisible = "quali"
+                , habillage = 3
+                )
+
+#Unimos Las gráficas creados
+list(var, ind) %>% 
+  plot_grid(plotlist = ., ncol = 2, labels = "auto")
+```
+
+### PCA por agrupación por ecotipo
+
+```{r}
+#Creamos la grafica de variables
+var <- plot.PCA(mv, choix = c("var"), cex=0.7)
+
+#Creamos los grafica de componetos con los individuos
 
 ind <- plot.PCA(mv, choix = c("ind"), cex=0.7
                 , label = "ind"
@@ -75,23 +149,33 @@ ind <- plot.PCA(mv, choix = c("ind"), cex=0.7
                 , habillage = 4
                 )
 
+#Unimos Las gráficas creados
 list(var, ind) %>% 
   plot_grid(plotlist = ., ncol = 2, labels = "auto")
+```
 
-
+```{r}
+#Resumen numerico de PCA
 summary(mv, nbelements = Inf, nb.dec = 2)
 pcainfo <- factoextra::get_pca_var(mv)
 pcainfo$cor
 pcainfo$contrib
 ```
 
-# Analisis de Cluster
+**#Interpretación**
+
+Los dos primeros componentes Comp1 y Comp2 detallan el 33.63% y 9.07% de la varianza
+
+Las tres variables de mayor contribucion en el estudio son weight_g (12.8%) fulton (13.06%) y gillraker_nb (0.43%).
+
+# Análisis de Cluster
 
 ```{r}
 cls <- HCPC(mv, graph = F)
 
-plot.HCPC(cls, choice = "map", nb.clust=-1, draw.tree = F)
+plot.HCPC(cls, choice = "map", nb.clust=-1, draw.tree = F, title="Análisis de conglomerados")
 ```
 
+**#Interpretación**
 
-
+EL análisis de clustering mostró la formación de tres grupos en base a Hierarchical Clustering on Principle Components con el analsis morfológico del presetne estudio
