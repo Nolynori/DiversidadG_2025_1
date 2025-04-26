@@ -1,0 +1,175 @@
+---
+title: "Genome-wide association mapping reveals a rich genetic architecture of complex traits in Oryza sativa"
+authors: "Deiner Gongora,  Noelia Noriega Cortez, Diana Arista"
+format:
+  html:
+    toc: true
+    toc-location: left
+    toc-expand: 4
+    number-sections: true
+    self-contained: true
+    output-file: "index"
+editor_options: 
+  chunk_output_type: console
+execute: 
+  warning: false
+  echo: false
+---
+
+# Título
+
+**Genome-wide association mapping reveals a rich genetic architecture of complex traits in Oryza sativa**
+
+# **Descripción**
+
+El arroz asiático (Oryza sativa) es esencial para más de la mitad de la población mundial. Este estudio identifica variantes genéticas clave en 413 muestras globales, vinculando genes con características importantes para acelerar la mejora y sostenibilidad del cultivo.
+
+# Referencias
+
+-   Zhao, K., Tung, CW., Eizenga, G. et al. Genome-wide association mapping reveals a rich genetic architecture of complex traits in Oryza sativa. Nat Commun 2, 467 (2011). https://doi.org/10.1038/ncomms1467 \# DOI
+
+-    ## https://doi.org/10.1038/ncomms1467
+
+```{r}
+#| label: setup
+#| include: false
+
+source("https://inkaverse.com/docs.r")
+knitr::opts_chunk$set(echo = T)
+
+cran <- c("inti"
+          , "metan"
+          , "psych"
+          , "FactoMineR"
+          , "openxlsx"
+          , "cowplot"
+          , "readxl"
+          , "stringr"
+          , "purrr"
+          )
+
+suppressPackageStartupMessages({
+  for (pkgs in cran) { 
+    if( !require(pkgs, character.only = T) ) {
+      install.packages(pkgs)
+      library(pkgs, character.only = T)
+    } 
+  }
+remove(cran, pkgs)
+})
+```
+
+# Base de datos
+
+```{r}
+library(readxl)
+pheno_data <- read_excel("database.xlsx")
+print(head(pheno_data))
+print(colnames(pheno_data))
+
+```
+
+
+# Revisar las repeticiones y los valores máximo y mínimo para el rasgo 'Flowering_time_at_Arkansas'
+```{r}
+
+# Primero, obtenemos una tabla de frecuencias
+frequency_table <- table(pheno_data$Flowering_time_at_Arkansas)
+
+# Luego, calculamos el mínimo y máximo, asegurándonos de omitir NA
+min_value <- min(pheno_data$Flowering_time_at_Arkansas, na.rm = TRUE)
+max_value <- max(pheno_data$Flowering_time_at_Arkansas, na.rm = TRUE)
+
+# Imprimir la tabla de frecuencias, el valor mínimo y el máximo
+print('Tabla de repeticiones para Flowering_time_at_Arkansas:')
+print(frequency_table)
+
+print('Valor mínimo de Flowering_time_at_Arkansas:')
+print(min_value)
+
+print('Valor máximo de Flowering_time_at_Arkansas:')
+print(max_value)
+```
+
+# Heredabilidad
+
+```{r}
+
+library(lme4)
+
+# Preparar los datos en formato largo
+data_long <- data.frame(
+  HybID = rep(pheno_data$HybID, 3),
+  Year = c(rep("Main", nrow(pheno_data)), 
+           rep("2006", nrow(pheno_data)), 
+           rep("2007", nrow(pheno_data))),
+  FT = c(pheno_data$Flowering_time_at_Arkansas,
+         pheno_data$Year06Flowering_time_at_Arkansas,
+         pheno_data$Year07Flowering_time_at_Arkansas)
+)
+
+# Ajustar el modelo mixto
+model <- lmer(FT ~ (1|HybID) + (1|Year), data = data_long)
+
+# Extraer componentes de varianza
+vc <- VarCorr(model)
+v_g <- vc$HybID[1]  # Varianza genética
+v_e <- vc$Year[1]   # Varianza ambiental
+v_r <- attr(vc, "sc")^2  # Varianza residual
+v_p <- v_g + v_e + v_r  # Varianza fenotípica total
+
+# Calcular heredabilidad
+H2 <- v_g/v_p
+
+print("Componentes de varianza:")
+print(paste("Varianza genética (V_G):", round(v_g, 4)))
+print(paste("Varianza ambiental (V_E):", round(v_e, 4)))
+print(paste("Varianza residual (V_R):", round(v_r, 4)))
+print(paste("Varianza fenotípica total (V_P):", round(v_p, 4)))
+print(paste("Heredabilidad en sentido amplio (H²):", round(H2, 4)))
+
+
+
+```
+# PCA
+
+```{r}
+
+library(readxl)
+df <- read_excel("database.xlsx", sheet = "Sheet 1")
+print(df[1, 4])  # This will show cell [0,3] in R indexing (which is [1,4])
+print(head(df))  # Let's see the structure of the data
+library(tidyverse)
+
+# Select only the rasgos fenotipicos i.e., numeric columns assume those represent the phenotypic traits
+phenotypic_data <- df %>% 
+  select_if(is.numeric) %>%
+  na.omit()
+
+# Standardize the data
+scaled_phenotypic <- scale(phenotypic_data)
+
+# Run PCA on all phenotypic traits
+pca_phenotypes <- prcomp(scaled_phenotypic)
+
+# Calculate variance explained
+var_explained <- pca_phenotypes$sdev^2 / sum(pca_phenotypes$sdev^2)
+
+# Display scree plot for phenotypic PCA
+plot(var_explained, type = "b", 
+     main = "Scree Plot - PCA de Rasgos Fenotipicos",
+     xlab = "Componentes Principales",
+     ylab = "Proporción de varianza explicada")
+
+# Print summary for first few components
+print(summary(pca_phenotypes)$importance[, 1:5])
+
+# Create a biplot to visualize PCA results
+biplot(pca_phenotypes, scale = 0)
+
+# Print head of PCA scores for preview
+pca_scores <- as.data.frame(pca_phenotypes$x)
+print(head(pca_scores))
+
+
+```

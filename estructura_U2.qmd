@@ -1,0 +1,194 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+#Título: **Genome-wide association mapping reveals a rich genetic architecture of complex traits in Oryza sativa**
+
+# **Descripción**
+
+El arroz asiático (Oryza sativa) es esencial para más de la mitad de la población mundial. Este estudio identifica variantes genéticas clave en 413 muestras globales, vinculando genes con características importantes para acelerar la mejora y sostenibilidad del cultivo.
+
+# Referencias
+
+-   Zhao, K., Tung, CW., Eizenga, G. et al. Genome-wide association mapping reveals a rich genetic architecture of complex traits in Oryza sativa. Nat Commun 2, 467 (2011). https://doi.org/10.1038/ncomms1467 \# DOI
+
+-    ## https://doi.org/10.1038/ncomms1467
+
+
+```{r}
+#| label:  setup
+
+source("https://inkaverse.com/docs.r")
+
+cran <- c("devtools", "poppr", "vcfR", "ape", "RColorBrewer")
+git <- c("hemstrow/snpR") 
+
+suppressPackageStartupMessages({
+  for (pkg in cran) { 
+    if( !require(pkg, character.only = TRUE) ) {
+      install.packages(pkg)
+      library(pkg, character.only = TRUE)
+    } 
+  }
+  
+  for (pkg in git) {
+    if( !require(sub(".*/", "", pkg), character.only = TRUE) ) {
+      devtools::install_github(pkg, upgrade = TRUE)
+      library(sub(".*/", "", pkg), character.only = TRUE)
+    }
+  }
+}); remove(cran, git, pkg)
+
+cat("Project: ", getwd(), "\n")
+session_info()
+
+
+```
+
+# Install and load necessary packages
+```{r}
+# Install and load necessary packages
+if (!requireNamespace("vcfR", quietly = TRUE)) {
+  install.packages("vcfR", repos="https://cran.rstudio.com/", dependencies = FALSE)
+}
+if (!requireNamespace("adegenet", quietly = TRUE)) {
+  install.packages("adegenet", repos="https://cran.rstudio.com/", dependencies = FALSE)
+}
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  install.packages("ggplot2", repos="https://cran.rstudio.com/", dependencies = FALSE)
+}
+
+library(vcfR)
+library(adegenet)
+library(ggplot2)
+
+# Leer el archivo VCF
+rubiVCF <- read.vcfR("sativas413.vcf.gz")
+
+# Mostrar información básica del VCF
+print(rubiVCF)
+
+
+```
+
+
+```{r}
+popdata <- readxl::read_excel("base.xlsx")
+
+all(colnames(rubiVCF@gt)[-1] == popdata$HybID)
+
+glrubi <- vcfR2genlight(rubiVCF) # data set into an object that is usable by poppr
+```
+
+```{r}
+ploidy(glrubi) <- 2
+```
+
+
+```{r}
+pop(glrubi) <- popdata$Sub_population
+glrubi
+```
+
+# Population genetic analyses
+
+```{r}
+tree <- aboot(glrubi
+               , tree = "upgma"
+               , distance = bitwise.dist
+               , sample = 100
+               , showtree = F, cutoff = 50, quiet = T)
+```
+
+## Distance tree
+
+```{r}
+cols <- brewer.pal(n = nPop(glrubi), name = "Dark2")
+plot.phylo(tree, cex = 0.8, font = 2, adj = 0, tip.color =  cols[pop(glrubi)])
+nodelabels(tree$node.label, adj = c(1.3, -0.5), frame = "n", cex = 0.8,font = 3, xpd = TRUE)
+#legend(35,10,c("CA","OR","WA"),cols, border = FALSE, bty = "n")
+legend('topleft', legend = c("CA","OR","WA"), fill = cols, border = FALSE, bty = "n", cex = 1)
+axis(side = 1)
+title(xlab = "Genetic distance (proportion of loci that are different)")
+```
+
+## PCA
+
+```{r}
+rubi.pca <- glPca(glrubi, nf = 3)
+
+rubi.pca.scores <- as.data.frame(rubi.pca$scores)
+rubi.pca.scores$pop <- pop(glrubi)
+
+plot <- ggplot(rubi.pca.scores, aes(x=PC1, y=PC2, colour=pop)) + 
+  geom_point(size=2) +
+  stat_ellipse(level = 0.95, size = 1) +
+  scale_color_manual(values = cols)+ 
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  theme_bw()
+plot
+```
+
+## DAPC
+
+The DAPC is a multivariate statistical approach that uses populations defined a priori to maximize the variance among populations in the sample by partitioning it into between-population and within-population components. DAPC thus maximizes the discrimination between groups. 
+
+```{r}
+pnw.dapc <- dapc(glrubi, n.pca = 3, n.da = 2)
+
+compoplot(pnw.dapc,col = cols, posi = 'top')
+```
+
+# snpR
+
+```{r}
+glrubi <- snpR::convert_vcfR("prubi_gbs.vcf.gz")
+glrubi
+
+popdata <- read.table("https://grunwaldlab.github.io/Population_Genetics_in_R/population_data.gbs.txt", sep = "\t", header = TRUE)
+
+sample.meta(glrubi)$pop <- popdata$State
+
+sample.meta(glrubi)
+snp.meta(glrubi)
+```
+
+## Statistics
+
+```{r}
+glrubi <- calc_basic_snp_stats(x = glrubi
+                               , facets = "pop"
+                               , sigma = 200
+                               , step = 50
+                               , par = 8
+                               )
+
+snpR::plot_pairwise_fst_heatmap(glrubi, facets = "pop")
+
+get.snpR.stats(glrubi, "pop", stats = "single")
+```
+
+## PCA
+
+```{r}
+plot <- plot_clusters(glrubi, facets = c("pop"))
+plot
+```
+
+## Genetic distance
+
+```{r}
+gd <- snpR::calc_genetic_distances(glrubi, facets = c("sampID"), method = "Edwards")
+dat <- get.snpR.stats(gd, facets = "sampID", stats = "genetic_distance")
+heatmap(as.matrix(dat$sampID$.base$Edwards))
+```
+
+## Population structure
+
+```{r}
+snpR::plot_structure(glrubi, facet = c("pop"), k = 2:10
+                     , clumpp = FALSE, method = "snapclust")
+
+snpR::plot_structure(glrubi, facet = c("pop"), k = c(5))
